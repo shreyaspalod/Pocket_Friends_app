@@ -72,6 +72,24 @@ alter table public.expense_splits enable row level security;
 alter table public.settlements enable row level security;
 
 -- ============================================================
+-- SECURITY DEFINER helper — bypasses RLS for membership checks
+-- Prevents infinite recursion in policies that reference group_members
+-- ============================================================
+
+create or replace function public.is_member_of(p_group_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.group_members
+    where group_id = p_group_id and user_id = auth.uid()
+  );
+$$;
+
+-- ============================================================
 -- PROFILES POLICIES
 -- ============================================================
 
@@ -88,14 +106,8 @@ create policy "profiles_update_own" on public.profiles
 -- GROUPS POLICIES
 -- ============================================================
 
--- Members can see their groups
 create policy "groups_select_member" on public.groups
-  for select using (
-    exists (
-      select 1 from public.group_members
-      where group_id = public.groups.id and user_id = auth.uid()
-    )
-  );
+  for select using (public.is_member_of(id));
 
 -- Any authenticated user can look up a group by invite code (needed for join flow)
 create policy "groups_select_by_invite_code" on public.groups
@@ -112,12 +124,7 @@ create policy "groups_update_creator" on public.groups
 -- ============================================================
 
 create policy "group_members_select" on public.group_members
-  for select using (
-    exists (
-      select 1 from public.group_members gm2
-      where gm2.group_id = public.group_members.group_id and gm2.user_id = auth.uid()
-    )
-  );
+  for select using (public.is_member_of(group_id));
 
 create policy "group_members_insert" on public.group_members
   for insert with check (
@@ -133,20 +140,10 @@ create policy "group_members_insert" on public.group_members
 -- ============================================================
 
 create policy "expenses_select_member" on public.expenses
-  for select using (
-    exists (
-      select 1 from public.group_members
-      where group_id = public.expenses.group_id and user_id = auth.uid()
-    )
-  );
+  for select using (public.is_member_of(group_id));
 
 create policy "expenses_insert_member" on public.expenses
-  for insert with check (
-    exists (
-      select 1 from public.group_members
-      where group_id = public.expenses.group_id and user_id = auth.uid()
-    )
-  );
+  for insert with check (public.is_member_of(group_id));
 
 create policy "expenses_delete_payer" on public.expenses
   for delete using (paid_by = auth.uid());
@@ -157,20 +154,12 @@ create policy "expenses_delete_payer" on public.expenses
 
 create policy "splits_select_member" on public.expense_splits
   for select using (
-    exists (
-      select 1 from public.expenses e
-      join public.group_members gm on gm.group_id = e.group_id
-      where e.id = public.expense_splits.expense_id and gm.user_id = auth.uid()
-    )
+    exists (select 1 from public.expenses e where e.id = expense_id and public.is_member_of(e.group_id))
   );
 
 create policy "splits_insert_member" on public.expense_splits
   for insert with check (
-    exists (
-      select 1 from public.expenses e
-      join public.group_members gm on gm.group_id = e.group_id
-      where e.id = public.expense_splits.expense_id and gm.user_id = auth.uid()
-    )
+    exists (select 1 from public.expenses e where e.id = expense_id and public.is_member_of(e.group_id))
   );
 
 -- ============================================================
@@ -178,20 +167,10 @@ create policy "splits_insert_member" on public.expense_splits
 -- ============================================================
 
 create policy "settlements_select_member" on public.settlements
-  for select using (
-    exists (
-      select 1 from public.group_members
-      where group_id = public.settlements.group_id and user_id = auth.uid()
-    )
-  );
+  for select using (public.is_member_of(group_id));
 
 create policy "settlements_insert_member" on public.settlements
-  for insert with check (
-    exists (
-      select 1 from public.group_members
-      where group_id = public.settlements.group_id and user_id = auth.uid()
-    )
-  );
+  for insert with check (public.is_member_of(group_id));
 
 -- ============================================================
 -- HELPER FUNCTION: auto-create profile on signup
