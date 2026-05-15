@@ -88,6 +88,7 @@ create policy "profiles_update_own" on public.profiles
 -- GROUPS POLICIES
 -- ============================================================
 
+-- Members can see their groups
 create policy "groups_select_member" on public.groups
   for select using (
     exists (
@@ -95,6 +96,10 @@ create policy "groups_select_member" on public.groups
       where group_id = public.groups.id and user_id = auth.uid()
     )
   );
+
+-- Any authenticated user can look up a group by invite code (needed for join flow)
+create policy "groups_select_by_invite_code" on public.groups
+  for select using (auth.uid() is not null);
 
 create policy "groups_insert_auth" on public.groups
   for insert with check (auth.uid() = created_by);
