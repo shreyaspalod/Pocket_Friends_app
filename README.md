@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pocket — Roommate Expense Splitter
 
-## Getting Started
+**Live demo:** https://pocket-expenses.vercel.app *(update after deployment)*
 
-First, run the development server:
+**Demo credentials:**
+| User | Email | Password |
+|---|---|---|
+| Shreyas | shreyas@demo.com | demo1234 |
+| Akash | akash@demo.com | demo1234 |
+| Kritika | kritika@demo.com | demo1234 |
+
+**Demo group invite code:** `DEMO0001`
+
+> Split expenses with roommates. Know who owes whom at a glance. Settle up in one tap.
+
+---
+
+## How to run locally
+
+```bash
+git clone https://github.com/your-name/pocket.git
+cd pocket
+npm install
+cp .env.example .env.local   # fill in your Supabase credentials
+```
+
+**Apply schema (once):**
+
+1. Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/caivdtzwlsjlghplzhao/editor)
+2. Paste and run `supabase/migrations/001_initial.sql`
+
+**Seed demo data:**
+
+```bash
+npm run seed
+```
+
+**Start dev server:**
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Layer | Technology | Why |
+|---|---|---|
+| Framework | Next.js 16 (App Router) | SSR + API routes in one repo; best Vercel fit |
+| Database | Supabase (PostgreSQL) | Managed Postgres, built-in Auth, RLS |
+| Auth | Supabase anonymous auth | Name-only login — no password required for regular users |
+| UI | Tailwind CSS v4 + Radix UI | Fast, accessible, minimal bundle |
+| Forms | React Hook Form v7 + Zod v4 | Type-safe validation |
+| Deployment | Vercel | Auto-deploy from GitHub, zero-config |
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Features
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Create groups** — name your group, get a shareable 8-character invite code
+- **Join groups** — enter the invite code from the dashboard
+- **Add expenses** — equal or custom (unequal) splits, payer selection, date, notes
+- **Balance view** — shows who owes whom using the netting algorithm
+- **Settle up** — one-tap settlement with full audit trail
+- **Activity log** — all settlements in one place
+- **CSV export** — download the group's expense history
+- **Recurring expenses** — mark an expense as monthly with day-of-month
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Balance netting algorithm
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Minimizes the number of transactions to settle all debts across N people.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Example (3 people):**
+- Rent: Shreyas paid ₹45,000, split ₹15,000 each
+- Groceries: Kritika paid ₹2,400, split equally
+- Dining: Akash paid ₹1,800 (unequal)
+
+**Net balances:** Shreyas +₹30,000, Akash -₹13,200, Kritika +₹600
+
+**Result:** 2 transactions (not 3+):
+- Akash → Shreyas ₹12,600
+- Akash → Kritika ₹600
+
+Implementation: greedy matching of largest creditor against largest debtor. See `lib/netting.ts`.
+
+---
+
+## Currency conversion (for international use)
+
+To handle multiple currencies I would:
+1. Store `currency_code` per group (`INR`, `USD`, `EUR`)
+2. Lock `exchange_rate_at_creation` on each expense to avoid disputes on rate changes
+3. Use a free rates API (Open Exchange Rates / Fixer.io) via a server-side cron job
+4. Convert all amounts to a base currency for balance math, show original currency in expense list
+5. Let users set a preferred display currency in their profile
+
+---
+
+## What's NOT done (de-scoped)
+
+- Receipt photo upload (excluded per requirements)
+- Push notifications / email reminders
+- Native mobile app
+- In-app member messaging
+
+## In production, I would also add
+
+- Email/SMS settlement reminders via Resend/Twilio
+- Real-time balance updates with Supabase Realtime
+- Soft-delete for expenses
+- Unit tests for the netting algorithm
+- Rate limiting on API routes
