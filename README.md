@@ -2,6 +2,8 @@
 
 **Live demo:** https://pocket-expenses.vercel.app 
 
+**Github link:** https://github.com/shreyaspalod/Pocket_Friends_app
+
 **Demo link:** https://drive.google.com/file/d/1gv3cyx6tDSGzZp0ebzZS2nF9VB0hPXQ_/view?usp=sharing
 
 **Demo credentials:**
