@@ -74,7 +74,7 @@ export function DashboardClient({ groups: initialGroups, userId }: Props) {
       const { data: group, error } = await supabase
         .from('groups')
         .select('*')
-        .eq('invite_code', code)
+        .ilike('invite_code', code)
         .single()
 
       if (error || !group) throw new Error('Group not found. Check the invite code.')

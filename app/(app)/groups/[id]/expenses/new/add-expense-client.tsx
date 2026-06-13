@@ -50,6 +50,7 @@ export function AddExpenseClient({ group, members, currentUserId }: Props) {
   const [recurrenceDayStr, setRecurrenceDayStr] = useState('')
   const [splitType, setSplitType] = useState<'equal' | 'custom'>('equal')
   const [isRecurring, setIsRecurring] = useState(false)
+  // customSplits stores percentage strings (0–100)
   const [customSplits, setCustomSplits] = useState<Record<string, string>>(
     Object.fromEntries(members.map((m) => [m.user_id, '']))
   )
@@ -75,15 +76,19 @@ export function AddExpenseClient({ group, members, currentUserId }: Props) {
     ? Math.round((amount - equalSplitAmount * members.length) * 100) / 100
     : 0
 
-  const customTotal = Object.values(customSplits).reduce((s, v) => s + (parseFloat(v) || 0), 0)
-  const customRemaining = amount > 0 ? Math.round((amount - customTotal) * 100) / 100 : 0
+  const customPctTotal = Object.values(customSplits).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+  const customPctRemaining = Math.round((100 - customPctTotal) * 100) / 100
+
+  function pctToAmount(pct: string): number {
+    return Math.round(((parseFloat(pct) || 0) / 100) * amount * 100) / 100
+  }
 
   function distributeEqually() {
-    const per = Math.floor((amount / members.length) * 100) / 100
-    const remainder = Math.round((amount - per * members.length) * 100) / 100
+    const perPct = Math.floor((100 / members.length) * 100) / 100
+    const remainder = Math.round((100 - perPct * members.length) * 100) / 100
     const next: Record<string, string> = {}
     members.forEach((m, i) => {
-      next[m.user_id] = (i === 0 ? per + remainder : per).toFixed(2)
+      next[m.user_id] = (i === 0 ? perPct + remainder : perPct).toFixed(2)
     })
     setCustomSplits(next)
   }
@@ -102,19 +107,24 @@ export function AddExpenseClient({ group, members, currentUserId }: Props) {
       const remainder = Math.round((parsedAmount - per * members.length) * 100) / 100
       splits = members.map((m, i) => ({ user_id: m.user_id, amount: i === 0 ? per + remainder : per }))
     } else {
-      splits = members
-        .map((m) => ({ user_id: m.user_id, amount: parseFloat(customSplits[m.user_id] || '0') }))
-        .filter((s) => s.amount > 0)
-
-      const total = splits.reduce((s, sp) => s + sp.amount, 0)
-      if (Math.abs(total - parsedAmount) > 0.01) {
+      const pctTotal = Object.values(customSplits).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+      if (Math.abs(pctTotal - 100) > 0.01) {
         toast({
           variant: 'destructive',
-          title: "Splits don't add up",
-          description: `Total splits (${formatCurrency(total)}) must equal the expense amount (${formatCurrency(parsedAmount)}).`,
+          title: "Percentages don't add up",
+          description: `Total is ${pctTotal.toFixed(2)}% — must equal 100%.`,
         })
         return
       }
+      // Convert percentages to rupee amounts; give rounding remainder to first member
+      const rawSplits = members.map((m) => ({
+        user_id: m.user_id,
+        amount: Math.floor(((parseFloat(customSplits[m.user_id] || '0') / 100) * parsedAmount) * 100) / 100,
+      }))
+      const splitTotal = rawSplits.reduce((s, sp) => s + sp.amount, 0)
+      const remainder = Math.round((parsedAmount - splitTotal) * 100) / 100
+      rawSplits[0].amount = Math.round((rawSplits[0].amount + remainder) * 100) / 100
+      splits = rawSplits.filter((s) => s.amount > 0)
     }
 
     try {
@@ -266,7 +276,7 @@ export function AddExpenseClient({ group, members, currentUserId }: Props) {
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-500">Enter each person&apos;s share</p>
+                  <p className="text-xs text-gray-500">Enter each person&apos;s percentage</p>
                   <button
                     type="button"
                     onClick={distributeEqually}
@@ -281,25 +291,31 @@ export function AddExpenseClient({ group, members, currentUserId }: Props) {
                       <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs shrink-0">
                         {m.profile.name[0]}
                       </div>
-                      <span className="text-sm font-medium text-gray-700 truncate">{m.profile.name}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-gray-700 truncate block">{m.profile.name}</span>
+                        {amount > 0 && (parseFloat(customSplits[m.user_id]) || 0) > 0 && (
+                          <span className="text-xs text-gray-400">{formatCurrency(pctToAmount(customSplits[m.user_id]))}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-sm text-gray-500">₹</span>
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
-                        placeholder="0.00"
+                        max="100"
+                        placeholder="0"
                         value={customSplits[m.user_id]}
                         onChange={(e) => setCustomSplits((prev) => ({ ...prev, [m.user_id]: e.target.value }))}
-                        className="w-28 text-right"
+                        className="w-24 text-right"
                       />
+                      <span className="text-sm text-gray-500">%</span>
                     </div>
                   </div>
                 ))}
-                <div className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm font-medium mt-2 ${Math.abs(customRemaining) < 0.01 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                  <span>{Math.abs(customRemaining) < 0.01 ? 'Splits balanced!' : 'Remaining to assign:'}</span>
-                  {Math.abs(customRemaining) >= 0.01 && <span>{formatCurrency(customRemaining)}</span>}
+                <div className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm font-medium mt-2 ${Math.abs(customPctRemaining) < 0.01 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  <span>{Math.abs(customPctRemaining) < 0.01 ? 'Splits balanced! (100%)' : 'Remaining to assign:'}</span>
+                  {Math.abs(customPctRemaining) >= 0.01 && <span>{customPctRemaining.toFixed(2)}%</span>}
                 </div>
               </div>
             )}

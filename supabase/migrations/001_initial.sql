@@ -16,7 +16,7 @@ create table if not exists public.groups (
   name        text not null,
   description text,
   currency    text default '₹' not null,
-  invite_code text unique default substring(md5(random()::text) from 1 for 8) not null,
+  invite_code text unique default upper(substring(md5(random()::text) from 1 for 8)) not null,
   created_by  uuid references public.profiles(id) on delete set null,
   created_at  timestamptz default now() not null
 );
