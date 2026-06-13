@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from '@/lib/use-toast'
-import { Wallet, ArrowRight, Users } from 'lucide-react'
+import { Wallet, Eye, EyeOff, Users } from 'lucide-react'
 
 const DEMO_USERS = [
   { name: 'Shreyas', email: 'shreyas@demo.com', password: 'demo1234' },
@@ -20,39 +21,30 @@ const DEMO_USERS = [
 export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [name, setName] = useState('')
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [demoLoading, setDemoLoading] = useState<string | null>(null)
 
-  async function handleNameLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    const trimmed = name.trim()
-    if (!trimmed) return
-
+    if (!email.trim() || !password) return
     setLoading(true)
     try {
-      const { data, error } = await supabase.auth.signInAnonymously({
-        options: { data: { name: trimmed } },
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
       })
-
       if (error) throw error
-
-      if (data.user) {
-        // Upsert profile with the given name
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({ id: data.user.id, name: trimmed }, { onConflict: 'id' })
-
-        if (profileError) throw profileError
-      }
-
       router.push('/dashboard')
       router.refresh()
     } catch (err) {
       toast({
         variant: 'destructive',
-        title: 'Could not sign in',
-        description: err instanceof Error ? err.message : 'Please try again.',
+        title: 'Sign in failed',
+        description: err instanceof Error ? err.message : 'Invalid email or password.',
       })
     } finally {
       setLoading(false)
@@ -69,7 +61,7 @@ export default function LoginPage() {
       if (error) throw error
       router.push('/dashboard')
       router.refresh()
-    } catch (err) {
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Demo login failed',
@@ -96,28 +88,59 @@ export default function LoginPage() {
 
         <Card className="shadow-md border-gray-100">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Get started</CardTitle>
-            <CardDescription>Enter your name to join or create a group</CardDescription>
+            <CardTitle className="text-lg">Welcome back</CardTitle>
+            <CardDescription>Sign in to your account to continue</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Name login */}
-            <form onSubmit={handleNameLogin} className="space-y-4">
+          <CardContent className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="name">Your name</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="name"
-                  placeholder="e.g. Shreyas"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={50}
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   autoFocus
+                  autoComplete="email"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={!name.trim() || loading}>
-                {loading ? 'Signing in…' : 'Continue'}
-                <ArrowRight className="w-4 h-4" />
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!email.trim() || !password || loading}
+              >
+                {loading ? 'Signing in…' : 'Sign in'}
               </Button>
             </form>
+
+            <p className="text-center text-sm text-gray-500">
+              Don&apos;t have an account?{' '}
+              <Link href="/register" className="text-green-600 font-medium hover:underline">
+                Create one
+              </Link>
+            </p>
 
             <div className="flex items-center gap-3">
               <Separator className="flex-1" />
@@ -125,11 +148,10 @@ export default function LoginPage() {
               <Separator className="flex-1" />
             </div>
 
-            {/* Demo logins */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-gray-400" />
-                <p className="text-sm text-gray-500">Log in as a demo user to explore a seeded group</p>
+                <p className="text-sm text-gray-500">Explore a pre-seeded group instantly</p>
               </div>
               {DEMO_USERS.map((user) => (
                 <button
@@ -147,9 +169,6 @@ export default function LoginPage() {
                   )}
                 </button>
               ))}
-              <p className="text-xs text-gray-400 text-center mt-2">
-                Demo credentials: demo@email / demo1234
-              </p>
             </div>
           </CardContent>
         </Card>
